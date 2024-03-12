@@ -1,7 +1,7 @@
 import asyncio
 import json
-from typing import Set, Dict, List, Any
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Body
+from typing import Set, Dict, List, Any, ClassVar
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Body, Depends
 from sqlalchemy import (
     create_engine,
     MetaData,
@@ -12,7 +12,8 @@ from sqlalchemy import (
     Float,
     DateTime,
 )
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import select
 from datetime import datetime
 from pydantic import BaseModel, field_validator
@@ -46,18 +47,9 @@ processed_agent_data = Table(
 )
 SessionLocal = sessionmaker(bind=engine)
 
+Base = declarative_base()
 
 # SQLAlchemy model
-class ProcessedAgentDataInDB(BaseModel):
-    id: int
-    road_state: str
-    user_id: int
-    x: float
-    y: float
-    z: float
-    latitude: float
-    longitude: float
-    timestamp: datetime
 
 
 # FastAPI models
@@ -91,10 +83,33 @@ class AgentData(BaseModel):
             )
 
 
-class ProcessedAgentData(BaseModel):
-    road_state: str
-    agent_data: AgentData
+class ProcessedAgentData(Base):
+    __tablename__ = "processed_agent_data"
 
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    road_state = Column(String)
+    user_id = Column(Integer)
+    x = Column(Float)
+    y = Column(Float)
+    z = Column(Float)
+    latitude = Column(Float)
+    longitude = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+Base.metadata.create_all(bind=engine)
+
+class ProcessedAgentDataCreate(BaseModel):
+    road_state: str
+    user_id: int
+    x: float
+    y: float
+    z: float
+    latitude: float
+    longitude: float
+
+class ProcessedAgentDataInDB(ProcessedAgentDataCreate):
+    id: int
+    timestamp: datetime
 
 # WebSocket subscriptions
 subscriptions: Dict[int, Set[WebSocket]] = {}
@@ -120,48 +135,79 @@ async def send_data_to_subscribers(user_id: int, data):
         for websocket in subscriptions[user_id]:
             await websocket.send_json(json.dumps(data))
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # FastAPI CRUDL endpoints
 
-
 @app.post("/processed_agent_data/")
-async def create_processed_agent_data(data: List[ProcessedAgentData]):
-    # Insert data to database
-    # Send data to subscribers
-    pass
+async def create_processed_agent_data(
+    data: ProcessedAgentDataCreate,
+    db: Session = Depends(get_db)
+):
+    db_item = ProcessedAgentData(**data)
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
 
 
 @app.get(
     "/processed_agent_data/{processed_agent_data_id}",
     response_model=ProcessedAgentDataInDB,
 )
-def read_processed_agent_data(processed_agent_data_id: int):
-    # Get data by id
-    pass
+def read_processed_agent_data(
+    processed_agent_data_id: int,
+    db: Session = Depends(get_db)
+):
+    db_item = db.query(ProcessedAgentData).filter(ProcessedAgentData.id == processed_agent_data_id).first()
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return db_item
 
 
 @app.get("/processed_agent_data/", response_model=list[ProcessedAgentDataInDB])
-def list_processed_agent_data():
-    # Get list of data
-    pass
+def list_processed_agent_data(db: Session = Depends(get_db)):
+    return db.query(ProcessedAgentData).all()
 
 
 @app.put(
     "/processed_agent_data/{processed_agent_data_id}",
     response_model=ProcessedAgentDataInDB,
 )
-def update_processed_agent_data(processed_agent_data_id: int, data: ProcessedAgentData):
-    # Update data
-    pass
+def update_processed_agent_data(
+    processed_agent_data_id: int,
+    data: ProcessedAgentDataCreate,
+    db: Session = Depends(get_db)
+):
+    db_item = db.query(ProcessedAgentData).filter(ProcessedAgentData.id == processed_agent_data_id).first()
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    for key, value in data.items():
+        setattr(db_item, key, value)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
 
 
 @app.delete(
     "/processed_agent_data/{processed_agent_data_id}",
     response_model=ProcessedAgentDataInDB,
 )
-def delete_processed_agent_data(processed_agent_data_id: int):
-    # Delete by id
-    pass
+def delete_processed_agent_data(
+    processed_agent_data_id: int,
+    db: Session = Depends(get_db)
+):
+    db_item = db.query(ProcessedAgentData).filter(ProcessedAgentData.id == processed_agent_data_id).first()
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    db.delete(db_item)
+    db.commit()
+    return db_item
 
 
 if __name__ == "__main__":
