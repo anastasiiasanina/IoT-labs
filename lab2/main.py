@@ -50,7 +50,18 @@ SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 # SQLAlchemy model
+class ProcessedAgentDataCreate(BaseModel):
+    road_state: str
+    user_id: int
+    x: float
+    y: float
+    z: float
+    latitude: float
+    longitude: float
 
+class ProcessedAgentDataInDB(ProcessedAgentDataCreate):
+    id: int
+    timestamp: datetime
 
 # FastAPI models
 class AccelerometerData(BaseModel):
@@ -97,19 +108,6 @@ class ProcessedAgentData(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
 Base.metadata.create_all(bind=engine)
-
-class ProcessedAgentDataCreate(BaseModel):
-    road_state: str
-    user_id: int
-    x: float
-    y: float
-    z: float
-    latitude: float
-    longitude: float
-
-class ProcessedAgentDataInDB(ProcessedAgentDataCreate):
-    id: int
-    timestamp: datetime
 
 # WebSocket subscriptions
 subscriptions: Dict[int, Set[WebSocket]] = {}
