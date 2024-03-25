@@ -147,7 +147,15 @@ async def create_processed_agent_data(
     data: ProcessedAgentDataCreate,
     db: Session = Depends(get_db)
 ):
-    db_item = ProcessedAgentData(**data)
+    db_item = ProcessedAgentData(
+        road_state=data.road_state,
+        user_id=data.user_id,
+        x=data.x,
+        y=data.y,
+        z=data.z,
+        latitude=data.latitude,
+        longitude=data.longitude,
+    )
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
@@ -185,8 +193,13 @@ def update_processed_agent_data(
     db_item = db.query(ProcessedAgentData).filter(ProcessedAgentData.id == processed_agent_data_id).first()
     if db_item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    for key, value in data.items():
-        setattr(db_item, key, value)
+    db_item.road_state = data.road_state
+    db_item.user_id = data.user_id
+    db_item.x = data.x
+    db_item.y = data.y
+    db_item.z = data.z
+    db_item.latitude = data.latitude
+    db_item.longitude = data.longitude
     db.commit()
     db.refresh(db_item)
     return db_item

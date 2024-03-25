@@ -5,7 +5,6 @@ from schema.aggregated_data_schema import AggregatedDataSchema
 from file_datasource import FileDatasource
 import config
 
-
 def connect_mqtt(broker, port):
     """Create MQTT client"""
     print(f"CONNECT TO {broker}:{port}")
